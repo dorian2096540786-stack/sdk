@@ -1,0 +1,49 @@
+name: Course Reminder
+
+on:
+  schedule:
+    # 每天 00:00 (北京时间 00:00 = UTC 16:00) 执行
+    - cron: '0 16 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  send-course-reminder:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      
+      - name: Run course query
+        run: python main.py
+      
+      - name: Read result
+        id: result
+        run: |
+          content=$(cat course_result.json)
+          echo "result=$content" >> $GITHUB_OUTPUT
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          cat course_result.json | jq -r '.full_message'
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Send notification via Server酱
+        if: env.SERVERCHAN_KEY != ''
+        run: |
+          curl -s "https://sctapi.ftqq.com/${SERVERCHAN_KEY}.send" \
+            -d "title=📚 课程表提醒" \
+            -d "desp=${{ steps.result.outputs.message }}"
+      
+      - name: Print result
+        run: |
+          echo "=== Course Query Result ==="
+          cat course_result.json | jq -r '.full_message'
